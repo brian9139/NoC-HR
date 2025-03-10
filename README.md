@@ -2,9 +2,6 @@
 
 Adaptive Hotspot Routing for NoC Simulation
 
-
-Adaptive Routing for Network-on-Chip Hotspot Simulation
-
 ## Basic Information
 
 **GitHub:** <https://github.com/brian9139/NoC-HR.git>
