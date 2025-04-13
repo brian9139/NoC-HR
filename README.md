@@ -120,10 +120,10 @@ noc.visualize_performance_metrics()  # Plots LBF and latency over time
 | Week  | Date   | Task                                   |
 |-------|--------|---------------------------------------|
 | 1     | 03/24  | Define data structure & setup       |
-| 2     | 03/31  | Implement NoC simulation framework  |
-| 3     | 04/07  | Implement traffic generation model  |
-| 4     | 04/14  | Implement adaptive routing function |
-| 5     | 04/21  | Unit testing for routing algorithm  |
+| 2     | 03/31  | Implement traffic generation model  |
+| 3     | 04/07  | Implement adaptive routing function  |
+| 4     | 04/14  | Unit testing: NoC initialization, traffic generation |
+| 5     | 04/21  | Unit testing: routing decisions, congestion metrics  |
 | 6     | 04/28  | Bind C++ NoC core to Python (Pybind11) |
 | 7     | 05/05  | Implement visualization module     |
 | 8     | 05/12  | Performance evaluation & metrics   |
