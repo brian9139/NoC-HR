@@ -8,7 +8,7 @@
 // 共用常數設定
 // ===================
 const int DEFAULT_BUFFER_CAPACITY = 10;
-const int DEFAULT_NOC_SIZE = 8;
+const int DEFAULT_NOC_SIZE      = 8;
 
 // ===================
 // 封包 (Packet) 結構 ---（第一週任務）
@@ -76,11 +76,15 @@ public:
     bool useHotspotTraffic;
 
     // -------------------
+    // 儲存每個 cycle 的 Load Balance Factor (LBF) 歷史，用於後續視覺化
+    // -------------------
+    std::vector<float> lbfHistory;
+
+    // -------------------
     // 第一週：初始化 NoC (設置 8×8 網格及基礎設定)
     // -------------------
     NoC(int size = DEFAULT_NOC_SIZE)
-        : size(size), packetCounter(0), useHotspotTraffic(false)
-    {
+        : size(size), packetCounter(0), useHotspotTraffic(false) {
         rng.seed(std::random_device()());
         for (int i = 0; i < size; i++) {
             std::vector<Router> row;
@@ -210,59 +214,69 @@ public:
         }
     }
 
-    // -------------------
-    // 模擬每個 cycle 的處理流程：流量產生 + 封包移動 (第三週任務)
-    // -------------------
-    void simulationStep() {
-        // 結構用以暫存封包移動資料
-        struct Move {
-            int cur_x, cur_y;   // 當前 router 座標
-            Packet packet;      // 要移動的封包
-            int next_x, next_y; // 下一跳座標
-        };
-
-        std::vector<Move> moves;
-
-        // 遍歷所有 router 處理前端封包
+    // ====================
+    // 計算並回傳 Load Balance Factor (LBF)
+    // LBF = max(c) / avg(c)
+    // ====================
+    float computeLBF() {
+        float sum = 0.0f;
+        float maxC = 0.0f;
+        int N = size * size;
         for (int i = 0; i < size; i++) {
             for (int j = 0; j < size; j++) {
-                Router &router = grid[i][j];
-                if (router.hasPacket()) {
-                    Packet currentPacket = router.buffer.front();
-                    // 若封包已到達目的地則移除
-                    if (currentPacket.dest_x == i && currentPacket.dest_y == j) {
+                float c = grid[i][j].getCongestion();
+                sum += c;
+                if (c > maxC) maxC = c;
+            }
+        }
+        float avgC = (N > 0 ? sum / N : 0.0f);
+        return maxC / (avgC > 1e-6f ? avgC : 1e-6f);
+    }
+
+    // -------------------
+    // 模擬每個 cycle 的處理流程：流量產生 + 封包移動 + LBF 計算並儲存
+    // -------------------
+    void runSimulation(int numCycles) {
+        for (int cycle = 0; cycle < numCycles; cycle++) {
+            std::cout << "========== 第 " << cycle << " 週期 ==========\n";
+            generateTraffic();
+            // 封包移動（與 simulationStep 等效）
+            struct Move { int cur_x, cur_y; Packet packet; int next_x, next_y; };
+            std::vector<Move> moves;
+            for (int i = 0; i < size; i++) {
+                for (int j = 0; j < size; j++) {
+                    Router &router = grid[i][j];
+                    if (!router.hasPacket()) continue;
+                    Packet current = router.buffer.front();
+                    if (current.dest_x == i && current.dest_y == j) {
                         router.popPacket();
-                        std::cout << "封包 ID " << currentPacket.id << " 到達目的地 (" 
+                        std::cout << "封包 ID " << current.id << " 到達目的地 (" 
                                   << i << "," << j << ") 被移除\n";
                     } else {
-                        // -------------------
-                        // 第三週：自適應路由決策
-                        // 依據 XY 鄰近節點的 congestion (buffer 裝填率) 來決定下一跳
-                        // Adaptive Routing Decision: R_next = argmin { C(R_j) }
-                        // -------------------
-                        int next_x, next_y;
-                        if (getNextHop(i, j, currentPacket.dest_x, currentPacket.dest_y, next_x, next_y)) {
-                            moves.push_back({i, j, currentPacket, next_x, next_y});
+                        int nx, ny;
+                        if (getNextHop(i, j, current.dest_x, current.dest_y, nx, ny)) {
+                            moves.push_back({i, j, current, nx, ny});
                         }
                     }
                 }
             }
-        }
-
-        // 執行封包移動
-        for (auto &move : moves) {
-            grid[move.cur_x][move.cur_y].popPacket();
-            bool added = grid[move.next_x][move.next_y].addPacket(move.packet);
-            if (added) {
-                std::cout << "封包 ID " << move.packet.id 
-                          << " 從 (" << move.cur_x << "," << move.cur_y << ") 移動到 (" 
-                          << move.next_x << "," << move.next_y << ")\n";
-            } else {
-                std::cout << "封包 ID " << move.packet.id 
-                          << " 嘗試移動到 (" << move.next_x << "," << move.next_y 
-                          << ") 但 buffer 滿，保留於 (" << move.cur_x << "," << move.cur_y << ")\n";
-                grid[move.cur_x][move.cur_y].addPacket(move.packet);
+            for (auto &m : moves) {
+                grid[m.cur_x][m.cur_y].popPacket();
+                if (grid[m.next_x][m.next_y].addPacket(m.packet)) {
+                    std::cout << "封包 ID " << m.packet.id 
+                              << " 從 (" << m.cur_x << "," << m.cur_y 
+                              << ") 移動到 (" << m.next_x << "," << m.next_y << ")\n";
+                } else {
+                    std::cout << "封包 ID " << m.packet.id 
+                              << " 嘗試移動到 (" << m.next_x << "," << m.next_y 
+                              << ") 但 buffer 滿，保留於 (" << m.cur_x << "," << m.cur_y << ")\n";
+                    grid[m.cur_x][m.cur_y].addPacket(m.packet);
+                }
             }
+            // 計算並記錄 LBF
+            float lbf = computeLBF();
+            lbfHistory.push_back(lbf);
+            std::cout << "LBF = " << lbf << "\n\n";
         }
     }
 
@@ -272,36 +286,25 @@ public:
     // -------------------
     bool getNextHop(int cur_x, int cur_y, int dest_x, int dest_y, int &next_x, int &next_y) {
         std::vector<std::pair<int,int>> candidates;
-
-        // 若沿 X 軸尚未達成目的，則嘗試沿 X 軸移動
-        if (cur_x < dest_x && cur_x + 1 < size) {
+        if (cur_x < dest_x && cur_x + 1 < size)
             candidates.push_back({cur_x + 1, cur_y});
-        } else if (cur_x > dest_x && cur_x - 1 >= 0) {
+        else if (cur_x > dest_x && cur_x - 1 >= 0)
             candidates.push_back({cur_x - 1, cur_y});
-        }
-
-        // 若沿 Y 軸尚未達成目的，則嘗試沿 Y 軸移動
-        if (cur_y < dest_y && cur_y + 1 < size) {
+        if (cur_y < dest_y && cur_y + 1 < size)
             candidates.push_back({cur_x, cur_y + 1});
-        } else if (cur_y > dest_y && cur_y - 1 >= 0) {
+        else if (cur_y > dest_y && cur_y - 1 >= 0)
             candidates.push_back({cur_x, cur_y - 1});
-        }
-
-        if (candidates.empty())
-            return false;
-
-        // 選擇 congestion 最低的鄰近 router
-        float minCongestion = 1e9;
-        std::pair<int,int> best = candidates[0];
-        for (const auto &cand : candidates) {
-            float congestion = grid[cand.first][cand.second].getCongestion();
-            if (congestion < minCongestion) {
-                minCongestion = congestion;
-                best = cand;
+        if (candidates.empty()) return false;
+        float minCong = 1e9;
+        std::tie(next_x, next_y) = candidates[0];
+        for (auto &c : candidates) {
+            float cong = grid[c.first][c.second].getCongestion();
+            if (cong < minCong) {
+                minCong = cong;
+                next_x = c.first;
+                next_y = c.second;
             }
         }
-        next_x = best.first;
-        next_y = best.second;
         return true;
     }
 
@@ -311,18 +314,6 @@ public:
     int uniformInt(int low, int high) {
         std::uniform_int_distribution<int> dist(low, high);
         return dist(rng);
-    }
-
-    // -------------------
-    // 運行模擬：執行指定數量的 cycle (第一週設定模擬循環)
-    // -------------------
-    void runSimulation(int numCycles) {
-        for (int cycle = 0; cycle < numCycles; cycle++) {
-            std::cout << "========== 第 " << cycle << " 週期 ==========\n";
-            generateTraffic();
-            simulationStep();
-            std::cout << "\n";
-        }
     }
 };
 
@@ -346,7 +337,7 @@ int main() {
     // 初始化非 hotspot 區域基線負載 (隨機產生 0~4 個封包)
     noc.initializeNonHotspotLoads();
 
-    // 第三週：自適應路由演算法依據鄰近 congestion 決定下一跳 (見 getNextHop() 實作)
+    // 第三週：自適應路由演算法 (Adaptive Routing Decision) 已實作於 getNextHop()
 
     // 執行模擬：示範執行 10 個 cycle（可依需求調整）
     noc.runSimulation(10);
