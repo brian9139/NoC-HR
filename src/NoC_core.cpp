@@ -88,14 +88,17 @@ public:
         : size(s), packetCounter(0), useHotspotTraffic(false)
     {
         rng.seed(std::random_device()());
-        grid.reserve(size);
-        for (int i = 0; i < size; i++) {
-            std::vector<Router> row;
-            row.reserve(size);
-            for (int j = 0; j < size; j++) {
-                row.emplace_back(i, j);
+        // 建立 grid
+        if (size > 0) {
+            grid.reserve(size);
+            for (int i = 0; i < size; i++) {
+                std::vector<Router> row;
+                row.reserve(size);
+                for (int j = 0; j < size; j++) {
+                    row.emplace_back(i, j);
+                }
+                grid.push_back(std::move(row));
             }
-            grid.push_back(std::move(row));
         }
     }
 
@@ -117,16 +120,17 @@ public:
     // -------------------
     std::pair<int,int> getRandomNonHotspotDestination() {
         std::vector<std::pair<int,int>> candidates;
-        candidates.reserve(size * size - hotspotArea.size());
+        candidates.reserve(size * size);
         for (int i = 0; i < size; i++) {
             for (int j = 0; j < size; j++) {
                 if (!isHotspot(i, j)) candidates.emplace_back(i, j);
             }
         }
         if (candidates.empty()) {
+            // 退化情況
             return { uniformInt(0, size-1), uniformInt(0, size-1) };
         }
-        return candidates[ uniformInt(0, candidates.size()-1) ];
+        return candidates[ uniformInt(0, static_cast<int>(candidates.size())-1) ];
     }
 
     // -------------------
@@ -134,6 +138,7 @@ public:
     // 封包產生時，目的地一定選擇非 hotspot 節點
     // -------------------
     void generateTraffic() {
+        if (size <= 0) return;  // 無節點時直接跳過
         std::uniform_real_distribution<float> dist(0.0f, 1.0f);
         if (dist(rng) < 0.5f) {
             int sx = uniformInt(0, size-1);
@@ -143,11 +148,7 @@ public:
                 std::tie(dx,dy) = getRandomNonHotspotDestination();
 
             Packet p{ packetCounter++, sx, sy, dx, dy };
-            if (grid[sx][sy].addPacket(p))
-                std::cout << "生成封包 ID " << p.id
-                          << " 於 (" << sx << "," << sy << ")，目的地 ("
-                          << dx << "," << dy << ")\n";
-            else
+            if (!grid[sx][sy].addPacket(p))
                 std::cout << "封包因 (" << sx << "," << sy << ") buffer 滿而丟棄\n";
         }
     }
@@ -156,15 +157,15 @@ public:
     // 初始化 hotspot 區域負載：使每個 hotspot 至少有 7 個封包
     // -------------------
     void initializeHotspots() {
+        if (size <= 0) return;
         for (auto [x,y] : hotspotArea) {
+            if (x<0||y<0||x>=size||y>=size) continue;
             while (grid[x][y].buffer.size() < 7) {
                 auto [dx,dy] = getRandomNonHotspotDestination();
                 if (dx==x && dy==y)
                     std::tie(dx,dy) = getRandomNonHotspotDestination();
                 Packet d{ packetCounter++, x, y, dx, dy };
                 if (!grid[x][y].addPacket(d)) break;
-                std::cout << "Hotspot (" << x << "," << y
-                          << ") 預填 dummy 封包 ID " << d.id << "\n";
             }
         }
     }
@@ -173,6 +174,7 @@ public:
     // 初始化非 hotspot 區域的原有負載 (隨機產生 0~4 個封包)
     // -------------------
     void initializeNonHotspotLoads() {
+        if (size <= 0) return;
         for (int i = 0; i < size; i++) {
             for (int j = 0; j < size; j++) {
                 if (isHotspot(i,j)) continue;
@@ -183,8 +185,6 @@ public:
                         std::tie(dx,dy) = getRandomNonHotspotDestination();
                     Packet d{ packetCounter++, i, j, dx, dy };
                     if (!grid[i][j].addPacket(d)) break;
-                    std::cout << "非Hotspot (" << i << "," << j
-                              << ") 預填 dummy 封包 ID " << d.id << "\n";
                 }
             }
         }
@@ -213,7 +213,6 @@ public:
     // -------------------
     void runSimulation(int cycles) {
         for (int c = 0; c < cycles; c++) {
-            std::cout << "========== 第 " << c << " 週期 ==========\n";
             generateTraffic();
 
             struct Move { int cx, cy; Packet p; int nx, ny; };
@@ -225,9 +224,6 @@ public:
                     Packet cur = r.buffer.front();
                     if (cur.dest_x == i && cur.dest_y == j) {
                         r.popPacket();
-                        std::cout << "封包 ID " << cur.id
-                                  << " 到達 (" << i << "," << j
-                                  << ") 被移除\n";
                     } else {
                         int nx, ny;
                         if (getNextHop(i,j,cur.dest_x,cur.dest_y,nx,ny))
@@ -237,22 +233,10 @@ public:
             }
             for (auto &m : moves) {
                 grid[m.cx][m.cy].popPacket();
-                if (grid[m.nx][m.ny].addPacket(m.p)) {
-                    std::cout << "封包 ID " << m.p.id
-                              << " 從 (" << m.cx << "," << m.cy
-                              << ") 移動到 (" << m.nx << "," << m.ny << ")\n";
-                } else {
-                    std::cout << "封包 ID " << m.p.id
-                              << " 嘗試移動到 (" << m.nx << "," << m.ny
-                              << ") 但 buffer 滿，保留於 ("
-                              << m.cx << "," << m.cy << ")\n";
-                    grid[m.cx][m.cy].addPacket(m.p);
-                }
+                grid[m.nx][m.ny].addPacket(m.p);
             }
 
-            float lbf = computeLBF();
-            lbfHistory.push_back(lbf);
-            std::cout << "LBF = " << lbf << "\n\n";
+            lbfHistory.push_back(computeLBF());
         }
     }
 
@@ -282,8 +266,10 @@ public:
 
     // -------------------
     // 輔助函數：返回範圍 [low, high] 內的隨機整數
+    // 若 high<low，直接回傳 low
     // -------------------
     int uniformInt(int low, int high) {
+        if (high < low) return low;
         std::uniform_int_distribution<int> dist(low, high);
         return dist(rng);
     }
