@@ -46,7 +46,14 @@ Three formulas for evaluating NoC load imbalance:
 2. **Adaptive routing decision:**
 
    ```math
-   R_{\mathrm{next}} = \arg\min_{R_j \in \mathrm{XY-Neighbors}(R_i)} C(R_j)
+   R_{\mathrm{next}}
+   =
+   \arg\min_{R_j \in \mathrm{XY\text{-}Neighbors}(R_i)}
+   \Bigl[
+   C(R_j)
+   +
+   \lambda \,\sqrt{(x_j - x_{\mathrm{dest}})^2 + (y_j - y_{\mathrm{dest}})^2}
+   \Bigr]
    ```
 
    This method compares the congestion levels of the four neighboring nodes

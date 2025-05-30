@@ -137,21 +137,20 @@ public:
     // 第二週：流量產生模組
     // 封包產生時，目的地一定選擇非 hotspot 節點
     // -------------------
-    void generateTraffic() {
-        if (size <= 0) return;  // 無節點時直接跳過
-        std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-        if (dist(rng) < 0.5f) {
-            int sx = uniformInt(0, size-1);
-            int sy = uniformInt(0, size-1);
-            auto [dx, dy] = getRandomNonHotspotDestination();
-            if (sx==dx && sy==dy)
-                std::tie(dx,dy) = getRandomNonHotspotDestination();
-
-            Packet p{ packetCounter++, sx, sy, dx, dy };
-            if (!grid[sx][sy].addPacket(p))
-                std::cout << "封包因 (" << sx << "," << sy << ") buffer 滿而丟棄\n";
+void generateTraffic() {
+    if (size <= 0) return;
+    std::uniform_real_distribution<float> coin(0,1);
+    for (int sx = 0; sx < size; sx++) {
+        for (int sy = 0; sy < size; sy++) {
+            // 每個 router 20% 機率 inject
+            if (coin(rng) < 0.2f) {
+                auto [dx,dy] = getRandomNonHotspotDestination();
+                Packet p{ packetCounter++, sx, sy, dx, dy };
+                grid[sx][sy].addPacket(p);
+            }
         }
     }
+}
 
     // -------------------
     // 初始化 hotspot 區域負載：使每個 hotspot 至少有 7 個封包
