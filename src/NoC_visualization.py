@@ -10,7 +10,7 @@ if BUILD_DIR not in sys.path:
     sys.path.insert(0, BUILD_DIR)
 
 import matplotlib
-# 如果在無 GUI 環境：
+# 如果在無 GUI 環境下：
 # matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
@@ -18,10 +18,10 @@ from matplotlib import gridspec
 import noc_sim
 
 # -----------------------------------------------------------------------------
-# 2. 收集 snapshot 與 LBF（只針對自適應路由）
+# 2. 收集快照與 LBF（僅針對自適應路由）
 # -----------------------------------------------------------------------------
 def collect_data(noc, total_cycles, snapshot_interval, hotspot_area=None):
-    # hotspot / non-hotspot 預填
+    # hotspot 與 non-hotspot 的預設初始化
     if hotspot_area:
         noc.set_hotspot_area(hotspot_area)
         noc.initialize_hotspots()
@@ -40,15 +40,15 @@ def collect_data(noc, total_cycles, snapshot_interval, hotspot_area=None):
     return snapshots, lbf_history
 
 # -----------------------------------------------------------------------------
-# 3. 顯示一組 heat-map snapshot grid
+# 3. 顯示一組熱力圖快照網格
 # -----------------------------------------------------------------------------
 def show_snapshots(snapshots, snapshot_interval):
-    n = len(snapshots)                # 应该是 10
+    n = len(snapshots)                # 應該是 10
     cols = 5
-    rows = (n + cols - 1) // cols     # =2
+    rows = (n + cols - 1) // cols     # = 2
 
     fig = plt.figure(figsize=(4*cols, 4*rows))
-    # 用 GridSpec 给 colorbar 留位置
+    # 使用 GridSpec 為 colorbar 留位置
     gs = gridspec.GridSpec(rows, cols+1, width_ratios=[1]*cols + [0.2])
     
     for idx, grid in enumerate(snapshots):
@@ -59,22 +59,22 @@ def show_snapshots(snapshots, snapshot_interval):
         ax.set_title(f"Cycle {snapshot_interval*(idx+1)}", fontsize=12)
         ax.set_xticks([]); ax.set_yticks([])
 
-    # 在最右侧并跨两行放 colorbar
+    # 在最右側並跨兩行放置 colorbar
     cax = fig.add_subplot(gs[:, cols])
     fig.colorbar(im, cax=cax, label="Congestion Ratio")
 
     plt.tight_layout()
-    plt.subplots_adjust(right=0.90)  # 给 colorbar 留地方
+    plt.subplots_adjust(right=0.90)  # 給 colorbar 留地方
     plt.show()
     
 # -----------------------------------------------------------------------------
-# 4. 畫自適應路由下的 LBF 折線
+# 4. 繪製自適應路由下的 LBF 折線圖
 # -----------------------------------------------------------------------------
 def plot_lbf(lbf_history):
     cycles = list(range(1, len(lbf_history) + 1))
     plt.figure(figsize=(8,4))
-    plt.plot(cycles, lbf_history, marker='o', label="Adaptive Routing")
-    plt.title("LBF over Time (Adaptive Routing)")
+    plt.plot(cycles, lbf_history, marker='o', label="自適應路由")
+    plt.title("LBF 隨時間變化（自適應路由）")
     plt.xlabel("Cycle")
     plt.ylabel("LBF")
     plt.grid(True, linestyle='--', alpha=0.5)
@@ -89,7 +89,7 @@ def visualize(size=8,
               total_cycles=50,
               snapshot_interval=10,
               hotspot_area=None):
-    # 僅使用 Adaptive Routing
+    # 僅使用自適應路由模擬
     noc = noc_sim.NoCSimulator(size=size)
 
     snapshots, lbf_history = collect_data(
