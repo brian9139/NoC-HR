@@ -37,7 +37,7 @@ Three formulas for evaluating NoC load imbalance:
 1. **Congestion calculation:**
 
    ```math
-   C(R) = \frac{\text{buffer maximum capacity}}{\text{number of packets in the buffer}}
+   C(R) = \frac{\text{number of packets in the buffer}}{\text{buffer maximum capacity}}
    ```
 
    This equation represents the buffer congestion ratio, which measures how
@@ -56,10 +56,7 @@ Three formulas for evaluating NoC load imbalance:
    \Bigr]
    ```
 
-   This method compares the congestion levels of the four neighboring nodes
-   of the current node and selects the one with the lowest congestion as the
-   next hop. This helps avoid entering hotspot areas, reducing the overall
-   system burden.
+   This method evaluates the routing cost of each XY-legal neighboring node of the current node and selects the next hop that minimizes a weighted sum of two factors: the congestion level at the neighboring node and its distance to the destination. The distance is measured using the Euclidean metric, and a tunable parameter is used to balance the influence of congestion and distance. By taking both factors into account, the routing decision helps avoid congested areas while maintaining proximity to the destination, leading to more efficient and adaptive network traffic flow.
 
 3. **Load balance factor (LBF):**
 
